@@ -1,0 +1,119 @@
+
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  auth-app
+
+Transform:
+- AWS::Serverless-2016-10-31
+
+
+Resources:
+
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: api
+      Cors:
+        AllowMethods: "'OPTIONS, POST, GET'"
+        AllowHeaders: "'Content-Type'"
+        AllowOrigin: "'*'" 
+  signupFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: src/handlers/signup.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 100
+      Description: Sign-up api
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+        - S3FullAccessPolicy:
+            BucketName: !Ref ImageBucket
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /signup
+            Method: POST
+            RestApiId:
+              Ref: ApiGatewayApi
+
+  loginFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: src/handlers/login.handler
+      Runtime: nodejs20.x
+      Architectures:
+        - x86_64
+      MemorySize: 128
+      Timeout: 100
+      Description: Login api
+      Policies:
+        # Give Create/Read/Update/Delete Permissions to the SampleTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref UsersTable
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /login
+            Method: POST
+            RestApiId:
+              Ref: ApiGatewayApi
+
+ 
+  UsersTable:
+    Type: AWS::Serverless::SimpleTable
+    Properties:
+      TableName: users
+      PrimaryKey:
+        Name: username
+        Type: String
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+
+  # S3 Bucket to store user profile images
+  ImageBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: profile-userimages
+      PublicAccessBlockConfiguration:
+        BlockPublicPolicy: false
+        
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders:
+              - '*'
+            AllowedMethods:
+              - PUT
+              - GET
+              - POST
+              - HEAD
+              - DELETE
+            AllowedOrigins:
+              - '*'
+  ImageBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref ImageBucket
+        PolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal: '*'
+              Action: s3:GetObject
+              Resource: !Sub arn:aws:s3:::${ImageBucket}/*
+
+Outputs:
+  APIGatewayEndpoint:
+    Description: "API Gateway endpoint URL for Prod stage"
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+  ImageBucket:
+    Description: "S3 Bucket for saving images"
+    Value: !Ref ImageBucket
